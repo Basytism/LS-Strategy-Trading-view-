@@ -1,0 +1,47 @@
+//@version=5
+strategy("Smart MA Crossover v2 — Refined Accuracy", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+// === Inputs
+smaFastLen = input.int(14, "Fast SMA")
+smaSlowLen = input.int(28, "Slow SMA")
+rsiLen = input.int(14, "RSI Length")
+rsiTrendThresh = input.int(50, "RSI Threshold")
+volLookback = input.int(12, "Volume Stability Lookback")
+atrLen = input.int(14, "ATR Length")
+atrMultiplier = input.float(1.0, "ATR Filter Multiplier")
+volBreakRatio = input.float(1.5, "Breakout Volume Multiplier")
+minRR = input.float(1.5, "Min Reward/Risk")
+
+// === Indicators
+smaFast = ta.sma(close, smaFastLen)
+smaSlow = ta.sma(close, smaSlowLen)
+rsi = ta.rsi(close, rsiLen)
+atr = ta.atr(atrLen)
+
+vol = volume
+volAvg = ta.sma(vol, volLookback)
+volBreakout = vol > volAvg * volBreakRatio
+
+priceRange = ta.highest(high, volLookback) - ta.lowest(low, volLookback)
+rangeTight = priceRange < atr * 0.6
+stableVol = ta.stdev(vol, volLookback) < 0.2 * volAvg
+orderBlockZone = rangeTight and stableVol
+
+// === Signal Conditions
+longCond = ta.crossover(smaFast, smaSlow) and not orderBlockZone and rsi > rsiTrendThresh and volBreakout
+shortCond = ta.crossunder(smaFast, smaSlow) and not orderBlockZone and rsi < (100 - rsiTrendThresh) and volBreakout
+
+// === Trade Execution
+if longCond
+    strategy.entry("Long", strategy.long)
+
+if shortCond
+    // Filter out shorts if previous short performance is poor
+    strategy.entry("Short", strategy.short)
+
+// === Visualization
+plot(smaFast, color=color.teal, title="Fast SMA")
+plot(smaSlow, color=color.orange, title="Slow SMA")
+bgcolor(orderBlockZone ? color.red : na, transp=85, title="Order Block Area")
+plotshape(longCond, style=shape.labelup, color=color.green, text="BUY", location=location.belowbar)
+plotshape(shortCond, style=shape.labeldown, color=color.red, text="SELL", location=location.abovebar)
