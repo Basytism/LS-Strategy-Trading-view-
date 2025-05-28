@@ -1,0 +1,51 @@
+//@version=1
+strategy("Smart Institutional-Aware MA Strategy", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10)
+
+// === Parameters
+smaFastLength = input.int(14, title="Fast SMA")
+smaSlowLength = input.int(28, title="Slow SMA")
+rsiLength = input.int(14, title="RSI Length")
+rsiThreshold = input.int(50, title="RSI Trend Threshold")
+volLookback = input.int(10, title="Volume Window")
+atrMult = input.float(0.5, title="ATR Range Threshold Multiplier")
+
+// === Indicators
+smaFast = ta.sma(close, smaFastLength)
+smaSlow = ta.sma(close, smaSlowLength)
+rsi = ta.rsi(close, rsiLength)
+atr = ta.atr(14)
+
+// === Base Entry Conditions
+longSignal = ta.crossover(smaFast, smaSlow)
+shortSignal = ta.crossunder(smaFast, smaSlow)
+
+// === Institutional Order Block Detector (Fixed Volume Trap Filter)
+priceRange = ta.highest(high, volLookback) - ta.lowest(low, volLookback)
+rangeNarrow = priceRange < atr * atrMult
+avgVol = ta.sma(volume, volLookback)
+volDev = ta.stdev(volume, volLookback)
+volumeStable = volDev < 0.2 * avgVol
+orderBlockDetected = rangeNarrow and volumeStable
+
+// === RSI Filter (Trend Confirmation)
+rsiBullish = rsi > rsiThreshold
+rsiBearish = rsi < 100 - rsiThreshold
+
+// === Final Entry Conditions
+validLong = longSignal and not orderBlockDetected and rsiBullish
+validShort = shortSignal and not orderBlockDetected and rsiBearish
+
+// === Strategy Execution
+if validLong
+    strategy.entry("Long", strategy.long)
+
+if validShort
+    strategy.entry("Short", strategy.short)
+
+// === Visualization
+plot(smaFast, title="Fast SMA", color=color.blue)
+plot(smaSlow, title="Slow SMA", color=color.orange)
+bgcolor(orderBlockDetected ? color.red : na, transp=85, title="Order Block Zone")
+
+plotshape(validLong, title="Long Entry", location=location.belowbar, color=color.green, style=shape.arrowup, size=size.small)
+plotshape(validShort, title="Short Entry", location=location.abovebar, color=color.red, style=shape.arrowdown, size=size.small)
